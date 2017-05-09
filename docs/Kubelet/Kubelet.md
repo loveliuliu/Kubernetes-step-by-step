@@ -85,3 +85,45 @@ Kubelet 从配置文件或者从 etcd server 上同步容器配置清单。容�
     ① 文件： 通过命令行参数传递。每20s会重新检查一次文件的配置更新；
     ② HTTP URL:通过命令行参数传递HTTP URL参数。 此端点每20秒检查（也可配置）, 通过查询获得容器清单;
     ③ Etcd Server: Kubelet发现etcd服务器并watch相关的key，在观察到容器配置更新后立即采取相应的行动。
+    
+    
+
+## Pod Manager  
+(1) Manager 存储和管理对Pods的访问，维护Static Pod和Mirror Pod 之间的映射  
+(2) kubelet 从3种 sources发现pod更新：file、http、APIServer。Source不是apiserver的pods称为static pods，API server不感知static pods的存在情况。为了监控Static Pods的状态，kubelet通过API server为每个static pod创建一个mirror pod  
+(3) mirror pod具有与其static pod相同的pod全名(name和namespace)，但元数据不同(如UID等)。 通过利用kubelet使用pod全名报告pod状态的事实，mirror pod的状态总是反映static pod的实际状态。 当static pod被删除时，相关联的孤儿mirror pod也将被删除。
+
+## Kubelet Container Cache  
+Cache 存储pod的PodStatus，表示container runtime中“所有”可见的pods/containers。所有的缓存条目(cache entries)至少与全局时间戳记（由UpdateTime()设置）一样新或更新，而单个条目可能比全局时间戳稍微新。 如果一个pod没有runtime已知的状态，Cache将返回一个填充ID的空的PodStatus对象。  
+
+Cache提供两种方法取回PodStatus：  
+(1) 使用非阻塞的Get()方法  
+(2) 使用阻塞的GetNewerThan()方法，这种方法调用时会阻塞直到对应的PodStatus的状态比指定时间更新的时候才会返回该状态  
+负责填充cache的组件调用Delete()来显式释放高速缓存条目。  
+   
+   Cache的主要构成：  
+   (1) 读写互斥锁RWMutex保护数据。RWMutex锁可以被任意多的reader或者单个writer持有。RWMutexes可以作为其他结构的一部分创建; RWMutex的零值是未锁定的互斥量。首次使用后，不得复制RWMutex。如果一个goroutine持有一个RWMutex进行读取，那么在第一个读锁定被释放之前，不能指望这个goroutine或者其他goroutine也可以获取读锁。 特别地，禁止递归读锁。 这是为了确保锁最终变得可用; 阻塞的锁调用会排除新reader获取锁定。  
+   (2) Cache使用map的方式存储Pod的状态信息。  
+   (3) 用全局timestamp表示缓存数据的fresh程度。所有缓存内容至少比此时间戳要更新。注意，初始化后的时间戳为零，只有在准备好服务缓存状态时，时间戳才会变为非零。  
+   
+   
+## syncPod 
+syncPod是用于同步单个pod的事务脚本(transaction script)，syncPod的主要流程如下：  
+(1) 如果 pod被创建，记录pod worker启动延迟  
+(2) 调用generateAPIPodStatus来为pod准备一个api.PodStatus  
+(3) 如果pod被看作是第一次运行，则记录pod启动延迟  
+(4) 更新状态管理器中的pod的状态  
+(5) 如果Pod不应该运行，杀死该pod  
+(6) 如果pod是一个静态pod且还没有对应的mirror pod，则创建mirror pod  
+(7) 创建pod的数据目录(如果不存在)  
+(8) 等待卷附加/挂载  
+(9) 获取pod的pull secrets  
+(10) 调用container runtime的SyncPod回调函数  
+(11) 更新pod的入口和出口限制的流量  
+
+  
+syncPod的sync操作有四种类型：  
+(1) SyncPodSync： 同步pod以达到期望的状态  
+(2) SyncPodUpdate：从source更新pod  
+(3) SyncPodCreate：从source创建pod  
+(4) SyncPodKill：杀死pod
