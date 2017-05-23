@@ -291,8 +291,3 @@ kubelet不希望逐出从DaemonSet导出的pod，因为这样的pod将立即重�
 
 ### 在inode耗尽的情况下kubelet如何排序pods
 当前，不可能知道特定容器消耗了多少个inodes。 如果kubelet观察到inode耗尽，它将通过按照OoS对pods排序逐出。cadvisor中已开放一个issue （https://github.com/google/cadvisor/issues/1422）来跟踪每个容器inode消耗，允许通过inode消耗对pod进行排名。 例如，可以让用户识别一个创建大量0字节文件的容器，并将该pod的逐出放在其他pods之前。
-。
-
-
-
-
