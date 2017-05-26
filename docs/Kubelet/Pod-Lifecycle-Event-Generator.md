@@ -13,9 +13,9 @@ PLEG proposal 的目标是通过降低pod管理开销提高Kubelet的扩展性�
  
 ## 设计方案概述
 PLEG proposal目标是使用 pod  lifecycle event watch机制代替周期性论询机制。  
-  
-  ![](/home/wong/桌面/github_picture/pleg.png)   
-    
+
+![](/home/wong/github_picture/pleg.png)  
+
 ## Pod Lifecycle Event
  Pod Lifecycle Event 在 pod级别抽象底层容器状态更改，使其与container runtime无关。 这层抽象将Kubelet与runtime细节隔离开来。  
    

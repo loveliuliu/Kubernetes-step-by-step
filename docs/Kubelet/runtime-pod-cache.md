@@ -23,7 +23,7 @@ Runtime Cache 用以优化减少 pod workers 调用GetPods() 的次数，但是�
 ## Runtime Pod Cahe
 Pod Cache 存储节点上所有 pods 的 `PodStatus` ，`PodStatus`包含从容器运行时生成 pod 的 `api.PodStatus` 所需的所有信息。  
 
-![](/home/wong/桌面/github_picture/pod-cache.png) 
+![](/home/wong/github_picture/pod-cache.png)   
 
 ```go
 // PodStatus表示pod及其容器的状态。
