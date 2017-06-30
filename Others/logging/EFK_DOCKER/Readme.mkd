@@ -1,0 +1,208 @@
+# 基于 Docker images 和 Docker run 构建 K8s 集群的 EFK 日志系统
+#1 整体架构
+ EFK分别表示日志系统的存储（Elasticsearch）、采集（Fluentd）、展示（Kibana）三个组件：
+ 
+ Fluentd ==> ElasticSearch <== Kibana
+ 
+(1) Fluentd：日志采集端，每个节点(物理节点，虚拟节点)部署一个，采集该节点上的指定文件，进行相应的格式转换和过滤后讲日志记录发送到相应的存储目的地（如 ElasticSearch）;
+
+(2) ElasticSearch：存储 Fluentd 采集的日志数据，并对数据进行索引，以支持对日志数据的实时查询;
+
+(3) Kibana: 可视化日志展示端 WebUI，提供 ElasticSearch 中日志数据查询的接口，并支持可定制的 dashboard.
+
+Fluentd 的运行需要ElasticSearch 的支持，Fluentd 先于 ElasticSearch 运行会导致其无法发送数据到 ElasticSearch 而频繁重启服务。
+Kibana 的运行也需要 ElasticSearch 的支持，甚至需要 Fluentd 的支持. Kibana 先于 ElasticSearch 运行会导致无法在 ElasticSearch 中建立 .kibana 索引从而无法正常运行；Kibana 在 ElasticSearch 运行之后、Fluentd 运行之前运行，会导致无法创建 index pattern，从而无法通过 kibana 查看任何日志信息.
+
+
+
+#2 相关镜像及配置文件
+##2.1 ElasticSearch 镜像及其相关配置文件
+ElasticSearch 对应镜像及相关的配置在路径 EFK_Docker/esimage/ 下.
+
+
+###2.1.1 Dockerfile
+以家镇的 ElasticSearch 镜像 reg.dhdc.com/dhc_cloud/elasticsearch:1.0 为基础镜像构建，具体 Dockerfile 内容如下：
+
+    FROM reg.dhdc.com/dhc_cloud/elasticsearch:1.0
+    
+    RUN mkdir -p /usr/elasticsearch/elasticsearch-2.4.1/config/templates
+    COPY template-k8s-logstash.json /usr/elasticsearch/elasticsearch-2.4.1/config/templates/template-k8s-logstash.json
+
+    COPY start_es.sh /start_es.sh
+
+    COPY elasticsearch.yml  /usr/elasticsearch/elasticsearch-2.4.1/config/elasticsearch.yml
+
+    EXPOSE 9200 9300
+
+    ENTRYPOINT ["/bin/sh", "-c"]
+
+###2.1.2 索引映射模板文件 template-k8s-logstash.json
+索引映射模板文件 template-k8s-logstash.json 主要用于在向 ElasticSearch 索引日志数据的时候解析出日志相关的 kubernetes 元数据，如 kubernetes.namespace_name,kubernetes.pod_name,kubernetes.container_name,等等. 
+
+Notes：实际测试中对应的索引模板文件并没有生效，可以通过 2.1.6 说明的方法手动更新索引映射模板.
+
+
+###2.1.3 配置文件 elasticsearch.yml
+配置文件 elasticsearch.yml 主要配置 ElasticSearch 相关的配置，主要设置绑定特定 IP 地址的参数，以支持直接使用 host 的 IP 地址访问 ES：
+    
+    //绑定特定 IP 地址
+    network.host: 0.0.0.0
+
+###2.1.4 启动 ElasticSearch 服务的脚本
+脚本 start_es.sh 用于启动 ElasticSearch 服务，在 ElasticSearch 容器正常启动后，可以在容器中通过该脚本启动 ElasticSearch 服务.
+
+
+###2.1.5 Makefile 编译 ElasticSearch 镜像
+Makefile 文件用于编译 ElasticSearch 镜像，针对不同的环境，需要设置不同的镜像仓库名称和镜像 Tag.
+
+
+###2.1.6 更新索引映射模板的脚本
+脚本文件 es_mapping.sh 用于更新 ElasticSearch 默认的索引模板，以支持索引日志数据的时候解析出日志相关的 kubernetes 元数据，并且对 kubernetes 的相关元数据字段不再分词以达到精确匹配的效果.如对名称为 test001-app001 的 Pod 进行查询时，只会以 “test001-app001” 作为关键字查询，而不会拆分成“test001”、“app001” 和 “test001-app001” 三个关键字进行查询.
+
+该脚本无需放在 ElasticSearch 镜像中：
+
+(1) 如果需要放到 ElasticSearch 镜像中，则可以将脚本中的 http://172.25.3.194:9200 对应的 IP 设置为 localhost 或者 127.0.0.1.
+
+(2) 如果不放到 ElasticSearch 镜像中，则需要在执行脚本前将脚本中的 http://172.25.3.194:9200 对应的 IP 设置为 ElasticSearch 安装的节点对应的 IP.
+
+Notes: 执行更新索引映射模板的操作需要在 Fluentd 开始往 ElasticSearch 写数据之前，因为更新索引映射模板不会对已创建的说句索引产生影响.执行方式是在 ElasticSearch 容器正常运行之后，直接执行 es_mapping.sh 文件即可.
+
+
+##2.2 Fluentd 镜像及其相关配置文件
+Fluentd 对应镜像及相关的配置在路径 EFK_Docker/fluentdimage/ 下.
+
+
+###2.2.1 Dockerfile
+以 kubernetes 1.4 版本的 fluentd-elasticsearch：1.12 镜像重新打 tag 的 reg.dhdc.com/loggingefk/fluentd-elasticsearch:v1.0.2 镜像为基础镜像构建（对应的 fluentd 的版本为 0.12.29），具体 Dockerfile 内容如下：
+
+    FROM reg.dhdc.com/loggingefk/fluentd-elasticsearch:v1.0.2
+    COPY td-agent.conf /etc/td-agent/td-agent.conf
+    COPY start-fluentd.sh /start-fluentd.sh
+    ENTRYPOINT ["/bin/sh", "-c"]
+
+
+###2.2.2 Fluentd 配置文件 td-agent.conf 
+Fluentd 的配置文件 td-agent.conf 主要配置了 fluentd 采集的日志文件路径（source，配置日志采集的源文件）、对日志文件的预处理（filter，过滤出日志相关的 kubernetes 元数据）、采集的日志的输出目的地（match，输出到 ElasticSearch）.
+对配置文件 td-agent.conf 需要注意一下几个地方的具体配置：
+(1) 输入插件 source 部分
+
+    time_format %Y-%m-%dT%H:%M:%S.%N%Z   // 定义日志时间戳的格式和精度  
+    format  json        //定义日志的存储格式
+    time_key key3       //定义从第几个 key 获取作为时间字段（key）的value，需要通过输入的日志源文件确认
+    enable_watch_timer true   //开启额外的 watch 机制，避免 inotify 机制异常导致停止采集日志
+    read_lines_limit 200   //单次 I/O 读取的日志的条数，过大容易导致 Fluentd buffer 故障重启
+
+(2) 输出插件 match 部分
+
+    host 172.25.3.194    // ElasticSearch 的节点的 IP 地址
+    buffer_type file     // 指定使用磁盘 file 文件作为 buffer，是最安全的使用方式，但高流量日志的情况下影响性能，不设置该参数则默认使用内存作为 buffer，有宕机导致数据丢失的风险
+    buffer_path /var/log/fluentd.buffer.file   //如果指定 buffer 类型为file，则需要制定对应的 file 路径名
+    buffer_chunk_limit 4M    // buffer 中一个 chunk 的大小，要大于单次 I/O 最大读取的日志的大小
+    buffer_queue_limit 256   // buffer 最多包含的 chunk 的数量
+    request_timeout 60   // 某些场景下，fluentd 发送数据到 ElasticSearch 后等待 HTTP 请求的返回超时时间，如果超时时间到达没有返回，则会重发数据，导致日志数据记录重复，数量不一致.
+
+
+###2.2.3 启动 FLuentd 服务的脚本
+脚本 start-fluentd.sh 用于启动 Fluentd 服务，在 Fluentd 容器正常启动后，可以在容器中通过该脚本启动 Fluentd 服务.
+
+
+###2.2.4 Makefile 编译 ElasticSearch 镜像
+Makefile 文件用于编译 Fluentd 镜像，针对不同的环境，需要设置不同的镜像仓库名称和镜像 Tag.
+
+
+##2.3 Kibana 镜像
+Kibana 镜像直接使用家镇的 kibana 镜像：
+
+    reg.dhdc.com/dhc_cloud/kibana
+打 tag 转为  
+
+    reg.dhdc.com/loggingefk/kibana:v1.0.0
+
+
+#3. 基于 Docker 的 EFK 日志系统部署
+根据前面的说明，部署的步骤是：
+
+(1) 部署 ElasticSearch
+
+(2) 部署 Fluentd
+
+(3) 部署 Kibana
+
+##3.1 部署 ElasticSearch
+###3.1.1 部署并启动 ElasticSearch 服务
+第一次部署时，在宿主机(如 172.25.3.194)上建立 ES 数据存储空间： 
+
+    mkdir /es/data 
+    chmod 777  -R /es
+使用如下命令部署 ElasticSearch
+
+    docker run -it -p 127.0.0.1:9200:9200 --net=host -v /es/data:/usr/elasticsearch/elasticsearch-2.4.1/data    reg.dhdc.com/loggingefk/elasticsearch:v1.0.0  bash
+
+ElasticSearch 镜像成功运行后，进入容器后执行如下命令启动 ElasticSearch 服务
+
+    ./start_es.sh 
+   
+
+###3.1.2 更新 ElasticSearch 的索引映射模板
+在集群任意节点执行(执行前需要修改对应的 ElasticSearch host)
+
+    ./es_mapping.sh
+也可以将该脚本文件放到 ElasticSearch 的镜像中，在对应的容器中运行该脚本.但需要注意的是，如果是该脚本放到镜像中，对应的 IP 段需要写成 localhost 或者 127.0.0.1.
+
+
+##3.2 部署 Fluentd 并启动 Fluentd 服务
+Fluentd 需要在每个采集节点部署一个镜像实例.
+在需要采集日志的节点执行如下操作部署 Fluentd 实例：
+
+    docker run -it --net=host  -v /var/log/containers:/var/log/containers  -v /var/lib/docker:/var/lib/docker reg.dhdc.com/loggingefk/fluentd:v1.0.0   bash
+
+Fluentd 容器正常运行后，进入容器后执行如下命令启动服务
+
+    ./start-fluentd.sh 
+
+Notes： 如果需要采集容器日志之外的其他日志，需要对应的额外增加其他 source 配置部分。
+
+
+##3.3 部署 Kibana 并启动 Kibana 服务
+Kibana 只需要部署一个实例.
+在 ElasticSearch 所在的主机(172.25.3.194)上执行如下命令部署 Kibana：
+
+    docker run -it -p 127.0.0.1:5601:5601 --net=host reg.dhdc.com/loggingefk/kibana:v1.0.0  bash
+
+Kibana 容器正常运行后，进入容器后执行如下命令启动服务
+
+    /usr/kibana/kibana-4.6.1-linux-x86_64/bin
+
+
+##3.4 ElasticSearch 及 Kibana 访问 UI
+ElasticSearch：
+
+    http://172.25.3.194:9200/_plugin/head/
+KIbana：
+
+    http://172.25.3.194:5601
+
+
+
+#4. 目前遇到的坑和需要注意的问题
+EFK 目前遇到的坑和需要注意的问题：
+
+(1) 在 Elasticsearch 的安装目录配置文件的  config/templates/ 中增加索引映射模板文件时，对应的模板文件不会生效，解决方式是在 ES 启动成功后手都修改映射模板（执行 es_mapping.sh 文件）
+
+(2) ES 采集的日志中，日志消息本体的 @timestamp 字段被解析，但是日志消息本体的 time 字段并没有动态解析出来，手动修改映射信息后，虽然可以增加 time 字段，但对应的字段在 ES 的 record 中并不显示。后来找出问题原因是输入插件的 source 部分需要制定时间格式 time_format 和 时间字段的取值选择 time_key.具体可以参考本文档 2.2.2 部分的内容
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
