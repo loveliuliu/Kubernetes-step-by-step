@@ -1,5 +1,5 @@
 # 基于 Docker images 和 Docker run 构建 K8s 集群的 EFK 日志系统
-#1 整体架构
+# 1 整体架构
  EFK分别表示日志系统的存储（Elasticsearch）、采集（Fluentd）、展示（Kibana）三个组件：
 
  Fluentd ------>ElasticSearch <------ Kibana
@@ -212,7 +212,7 @@ docker run -it -p 127.0.0.1:5601:5601 --net=host --restart=always reg.dhdc.com/l
 
 Kibana 容器正常运行后会自动完成 Kibana 的启动工作
 
-##3.4 ElasticSearch 及 Kibana 访问 UI
+## 3.4 ElasticSearch 及 Kibana 访问 UI
 ElasticSearch：
 ```
 http://172.25.3.194:9200/_plugin/head/
@@ -224,7 +224,7 @@ http://172.25.3.194:5601
 ```
 
 
-#4. 目前遇到的坑和需要注意的问题
+# 4. 目前遇到的坑和需要注意的问题
 EFK 目前遇到的坑和需要注意的问题：
 
 (1) 在 Elasticsearch 的安装目录配置文件的  config/templates/ 中增加索引映射模板文件时，对应的模板文件不会生效，解决方式是在 ES 启动成功后手都修改映射模板（执行 es_mapping.sh 文件）
@@ -232,9 +232,9 @@ EFK 目前遇到的坑和需要注意的问题：
 (2) ES 采集的日志中，日志消息本体的 @timestamp 字段被解析，但是日志消息本体的 time 字段并没有动态解析出来，手动修改映射信息后，虽然可以增加 time 字段，但对应的字段在 ES 的 record 中并不显示。后来找出问题原因是输入插件的 source 部分需要制定时间格式 time_format 和 时间字段的取值选择 time_key.具体可以参考本文档 2.2.2 部分的内容
 
 
-#5.  Fluentd->Kafka->Connetctor->Es->Kibana  的 FKEK 日志Docker 环境部署
-##5.1  构建编译 Kafka 到 Elasticsearch 的 Connector
-###5.1.1  安装 Maven
+# 5.  Fluentd->Kafka->Connetctor->Es->Kibana  的 FKEK 日志Docker 环境部署
+## 5.1  构建编译 Kafka 到 Elasticsearch 的 Connector
+### 5.1.1  安装 Maven
 (1)  下载 apache-maven-3.5.0-bin.tar.gz
 ```
 cd  /opt
@@ -256,7 +256,7 @@ export PATH=$M2_HOME/bin:$PATH
 (3) 验证 Maven
 最后运行 mvn -v验证 maven是否安装成功，
 
-###5.1.2  编译 Kafka 连接 Elasticsearch 的插件
+### 5.1.2  编译 Kafka 连接 Elasticsearch 的插件
 特别提醒（我自己在这个地方被坑了大半天）： 不能用 root 用户编译，否则编译 test 的时候无法成功
 (1) 下载插件  kafka-connect-elasticsearch
 ```
@@ -273,8 +273,8 @@ mvn clean package
 编译成功之后会在当前目录下生成  target 目录，如果   target/kafka-connect-elasticsearch-3.2.0-SNAPSHOT-package/share/java/kafka-connect-elasticsearch/ 目录中有文件（都是 jar 包文件），则编译成功。
 
 
-##5.2  将 Kafka 到 Elasticsearch 的 Connector 插件安装到 Kafka
-###5.2.1  安装插件
+## 5.2  将 Kafka 到 Elasticsearch 的 Connector 插件安装到 Kafka
+### 5.2.1  安装插件
 将前面编译的   kafka-connect-elasticsearch/target/kafka-connect-elasticsearch-3.2.0-SNAPSHOT-package/share/java/kafka-connect-elasticsearch/ 目录中所有文件（都是 jar 包文件）拷贝到每个 kafka 安装目录的 libs 目录下。
 
 ### 5.2.2 插件配置文件
@@ -283,7 +283,7 @@ mvn clean package
 (2) connect-standalone.properties 文件；
 这两个配置文件都需要放到 Kafka 安装目录的 config 目录下
 
-###5.2.3  配置文件 elasticsearch-connect.properties 的配置内容及说明
+### 5.2.3  配置文件 elasticsearch-connect.properties 的配置内容及说明
 使用以下内容创建 elasticsearch-connect.properties 文件：
 
 ```
@@ -313,7 +313,7 @@ schema.ignore=true
 ERROR Task elasticsearch-sink-0 threw an uncaught and unrecoverable exception (org.apache.kafka.connect.runtime.WorkerTask:142)
 ```
 
-###5.2.4 配置文件 connect-standalone.properties 的配置内容及说明
+### 5.2.4 配置文件 connect-standalone.properties 的配置内容及说明
 注意：这里是以 Standalone 模式运行 Kafka Connect Elasticsearch 的配置为例
 
 ```
@@ -333,29 +333,29 @@ offset.flush.interval.ms=10000
 
 文件 connect-standalone.properties 定义了 Kafka brokers 列表、key 和 value 转换器、是否应当使用 schemas，等等。
 
-##5.3  物理节点上 Kafka 及组件启动相关
+## 5.3  物理节点上 Kafka 及组件启动相关
 各个组件的安装可以参考后面各个组件Docker 化的 setup.sh 代码
-###5.3.1  启动zookeeper
+### 5.3.1  启动zookeeper
 进入zookeeper 的安装目录的 bin/目录下，使用下面的命令启动zookeeper：
 ```
 ./zkServer.sh  start
 ```
 
 
-###5.3.2  启动kafka
+### 5.3.2  启动kafka
 进入 kafka 的安装目录，使用下面的命令启动kafka：
 ```
 bin/kafka-server-start.sh config/server.properties &
 ```
 
 
-###5.3.3  在kafka中创建名称为 logs 的 topic
+### 5.3.3  在kafka中创建名称为 logs 的 topic
 进入 kafka 的安装目录，创建 topic (第一次需要，后续不需要)：
 ```
 bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic syslog-topic &
 ```
 
-###5.3.4  启动kafka连接 Elasticsearch 的连接器
+### 5.3.4  启动kafka连接 Elasticsearch 的连接器
 进入 kafka 的安装目录，使用下面的命令启动kafka连接器（不稳定，如果ES断开，往往连接器也会异常），运行前要确保 kafka 已运行并创建了对应的 topic (之前配置文件中设置为 logs)：
 ```
 bin/connect-standalone.sh config/connect-standalone.properties config/elasticsearch-connect.properties  &
@@ -363,9 +363,9 @@ bin/connect-standalone.sh config/connect-standalone.properties config/elasticsea
 该命令以Kafka 所在节点上一个单独的 JVM 进程的方式启动运行，Kafka 中指定 topic 中的数据都会传输到 ElasticSearch。
 
 
-##5.4  Docker 化部署 FKEK (Fluentd->Kafka->ElasticSearch->Kibana)
-###5.4.1 Zookeeper 镜像制作
-####5.4.1.1 Dockerfile
+## 5.4  Docker 化部署 FKEK (Fluentd->Kafka->ElasticSearch->Kibana)
+### 5.4.1 Zookeeper 镜像制作
+#### 5.4.1.1 Dockerfile
 Dockerfile 文件内容如下：
 ```
 FROM after4u/ubuntu-jdk8
@@ -377,7 +377,7 @@ ENTRYPOINT ["/bin/sh", "-c", "/opt/run.sh;while true; do sleep 1; done"]
 ```
 其中 setup.sh 用于安装 zookeeper，run.sh 用于启动运行 zookeeper
 
-####5.4.1.2  setup.sh
+#### 5.4.1.2  setup.sh
 安装 zookeeper 的操作脚本内容如下：
 ```
 #!/bin/sh
@@ -393,7 +393,7 @@ mkdir -p /opt/data/zookeeperdata
 makdir -p /opt/log/zookeeplogs
 ```
 
-####5.4.1.3 run.sh
+#### 5.4.1.3 run.sh
 运行 zookeeper 的操作脚本如下：
 ```
 #!/bin/sh
@@ -401,7 +401,7 @@ makdir -p /opt/log/zookeeplogs
 /opt/zookeeper/bin/zkServer.sh start
 ```
 
-####5.4.1.4 zoo.cfg
+#### 5.4.1.4 zoo.cfg
 配置文件 zoo.cfg 的内容如下：
 ```
 ticketTime=2000
@@ -417,7 +417,7 @@ dataLogDir=/opt/log/zookeeplogs
 ```
 其中被注释的部分是多节点 zookeeper 需要的一部分配置参数
 
-####5.4.1.5 Makefile
+#### 5.4.1.5 Makefile
 Makefile  内容如下：
 ```
 TAG = v0.1
@@ -431,10 +431,10 @@ push:
 	docker push $(REGISTRY)/$(USER)/$(IMAGE):$(TAG)
 ```
 
-###5.4.2 Kafka 镜像制作
+### 5.4.2 Kafka 镜像制作
 kafka 镜像是不包含导入数据到 ES 的连接器，实现的功能是启动 kafka 并运行。
 
-####5.4.2.1 Dockerfile
+#### 5.4.2.1 Dockerfile
 Dockerfile 文件内容如下：
 ```
 FROM after4u/ubuntu-jdk8
@@ -445,7 +445,7 @@ COPY run.sh /opt/run.sh
 ENTRYPOINT ["/bin/sh", "-c", "/opt/run.sh;while true; do sleep 1; done"]
 ```
 
-####5.4.2.2 setup.sh
+#### 5.4.2.2 setup.sh
 安装 kafka 的操作脚本内容如下：
 ```
 #!/bin/sh
@@ -461,7 +461,7 @@ rm -rf kafka_2.10-0.10.0.0.tgz
 mkdir -p  /opt/log/kafkalogs
 ```
 
-####5.4.2.3 run.sh
+#### 5.4.2.3 run.sh
 运行 kafak的操作脚本如下：
 ```
 #!/bin/sh
@@ -481,7 +481,7 @@ sleep 15
 #/opt/kafka/bin/kafka-console-consumer.sh --zookeeper localhost:2181 --topic logs
 ```
 
-####5.4.2.4 Makefile
+#### 5.4.2.4 Makefile
 Makefile  内容如下：
 ```
 TAG = v0.1
@@ -495,7 +495,7 @@ push:
 	docker push $(REGISTRY)/$(USER)/$(IMAGE):$(TAG)
 ```
 
-####5.4.2.5 配置文件 server.properties
+#### 5.4.2.5 配置文件 server.properties
 配置文件 server.properties 的内如如下：
 ```
 broker.id=0
@@ -518,10 +518,10 @@ zookeeper.connection.timeout.ms=6000
 其中 zookeeper.connect 对应的 localhost 设置为对应 zookeeper 所在节点的节点名或 IP 地址，如果 zookeeper 与 kafka 同节点则无需修改。
 
 
-###5.4.3 kafka_es 镜像制作
+### 5.4.3 kafka_es 镜像制作  
 kafka_es 镜像是包含了 ES 连接器并启动运行该连接器，比 kafka 镜像需要多连接器部分的操作，详细内如如下所述。
 
-####5.4.3.1 Dockerfile
+#### 5.4.3.1 Dockerfile
 Dockerfile 文件内容如下：
 ```
 FROM after4u/ubuntu-jdk8
@@ -547,7 +547,7 @@ COPY run.sh /opt/run.sh
 ENTRYPOINT ["/bin/sh", "-c", "/opt/run.sh;while true; do sleep 60; done"]
 ```
 
-####5.4.3.2 setup.sh
+#### 5.4.3.2 setup.sh
 安装 kafka 的操作脚本内容如下：
 ```
 #!/bin/sh
@@ -563,7 +563,7 @@ rm -rf kafka_2.10-0.10.0.0.tgz
 mkdir -p  /opt/log/kafkalogs
 ```
 
-####5.4.3.3 run.sh
+#### 5.4.3.3 run.sh
 运行 kafak 及连接器的操作脚本如下：
 ```
 #!/bin/sh
@@ -583,7 +583,7 @@ sleep 15
 #/opt/kafka/bin/kafka-console-consumer.sh --zookeeper localhost:2181 --topic logs
 ```
 
-####5.4.3.4 Makefile
+#### 5.4.3.4 Makefile
 Makefile  内容如下：
 ```
 TAG = v0.1
@@ -597,7 +597,7 @@ push:
 	docker push $(REGISTRY)/$(USER)/$(IMAGE):$(TAG)
 ```
 
-####5.4.3.5 配置文件 server.properties
+#### 5.4.3.5 配置文件 server.properties
 配置文件 server.properties 的内如如下：
 ```
 broker.id=0
@@ -619,12 +619,12 @@ zookeeper.connection.timeout.ms=6000
 ```
 其中 zookeeper.connect 对应的 localhost 设置为对应 zookeeper 所在节点的节点名或 IP 地址，如果 zookeeper 与 kafka 同节点则无需修改。
 
-####5.4.3.6 连接器配置文件及依赖包
+#### 5.4.3.6 连接器配置文件及依赖包
 配置文件 connect-standalone.properties、elasticsearch-connect.properties 见 5.2.3 和 5.2.4 小节的
 依赖包 package 及其下的 13 个 jar 包来自 5.1.2 节之后的内容。
 
-###5.4.4 fluentd_kafka 镜像制作
-####5.4.4.1 Dockerfile
+### 5.4.4 fluentd_kafka 镜像制作
+#### 5.4.4.1 Dockerfile
 Dockerfile 文件内容如下：
 ```
 FROM reg.dhdc.com/loggingefk/fluentd:v1.0.1
@@ -634,7 +634,7 @@ RUN  td-agent-gem install fluent-plugin-kafka
 ENTRYPOINT ["/bin/sh", "-c", "/start-fluentd.sh"]
 ```
 
-####5.4.4.2 start-fluentd.sh
+#### 5.4.4.2 start-fluentd.sh
 运行 fluentd 的操作脚本内容如下：
 ```
 #!/bin/bash
@@ -646,7 +646,7 @@ do
 done
 ```
 
-####5.4.4.3 fluentd 配置文件 td-agent.conf
+#### 5.4.4.3 fluentd 配置文件 td-agent.conf
 配置文件 td-agent.conf 如下（改变之处主要是输出到了 Kafka）：
 ```
 # Do not directly collect fluentd's own logs to avoid infinite loops.
@@ -716,7 +716,7 @@ brokers 192.168.0.1:9092，192.168.0.2:9092，192.168.0.3:9092
 zookeeper 192.168.1.1:2181，192.168.1.2:2181，192.168.1.3:2181
 ```
 
-####5.4.4.4 Makefile
+#### 5.4.4.4 Makefile
 Makefile  内容如下：
 ```
 TAG = v0.1
@@ -731,7 +731,7 @@ push:
 ```
 
 
-###5.4.5 Docker 化部署 FKEK (Fluentd->Kafka->ElasticSearch->Kibana)
+### 5.4.5 Docker 化部署 FKEK (Fluentd->Kafka->ElasticSearch->Kibana)
 #### 5.4.5.1 启动 zookeeper 容器
 使用如下命令启动 zookeeper ：
 
@@ -776,24 +776,24 @@ docker run -it --net=host --restart=always -v /var/log/containers:/var/log/conta
 
 
 
-#6.  Fluentd->Kafka->Logstash->Es->Kibana  的 FKLEK 日志Docker 环境部署
-##6.1 fluentd_kafka 镜像构建
+# 6.  Fluentd->Kafka->Logstash->Es->Kibana  的 FKLEK 日志Docker 环境部署
+## 6.1 fluentd_kafka 镜像构建
 Fluentd 输出数据到 Kafka 对应的镜像 fluentd_kafka:v0.1 的构建如 5.4.4 节所述，需要的注意的是配置文件中对应的 brokers 和 zookeeper 对应的IP地址或主机名需要根据实际情况修改；
 
-##6.2 kafka 镜像构建
+## 6.2 kafka 镜像构建
 Kafka 对应的镜像 kafka:v0.1 的构建如 5.4.2 节所述，需要的注意的是配置文件中参数 zookeeper.connect 对应的IP地址或主机名需要根据实际情况修改；
 
-##6.3 zookeeper 镜像构建
+## 6.3 zookeeper 镜像构建
 zookeeper 对应的镜像 zookeeper:v0.1 的构建如 5.4.1 节所述，需要的注意的是如果是多节点的 zookeeper，需要增加相应的配置参数；
 
-##6.4 elasticsearch 镜像构建
+## 6.4 elasticsearch 镜像构建  
 直接使用镜像 reg.dhdc.com/loggingefk/elasticsearch:v1.0.1
 
-##6.5 kibana 镜像构建
+## 6.5 kibana 镜像构建  
 直接使用镜像 reg.dhdc.com/loggingefk/kibana:v1.0.1
 
-##6.6 Logstash 镜像构建
-###6.6.1 Dockerfile
+## 6.6 Logstash 镜像构建  
+###  6.6.1 Dockerfile  
 Dockerfile 文件内容如下：
 ```
 FROM after4u/ubuntu-jdk8
@@ -806,7 +806,7 @@ ENTRYPOINT ["/bin/sh", "-c", "/opt/run.sh;while true; do sleep 60; done"]
 ```
 其中 setup.sh 用于安装 logstash，run.sh 用于启动运行 logstash
 
-###6.6.2 setup.sh
+### 6.6.2 setup.sh  
 安装 logstash 的操作脚本内容如下：
 ```
 #!/bin/sh
@@ -819,7 +819,7 @@ mv logstash-2.4.1 logstash
 rm -rf logstash-2.4.1.tar.gz
 ```
 
-###6.6.3 run.sh
+### 6.6.3 run.sh  
 运行 logstash 的操作脚本如下：
 ```
 #!/bin/sh
@@ -828,7 +828,7 @@ rm -rf logstash-2.4.1.tar.gz
 /opt/logstash/bin/logstash  -f /opt/logstash/conf/logstash.conf &
 ```
 
-###6.6.4 配置文件conf/logstash.conf
+### 6.6.4 配置文件conf/logstash.conf  
 配置文件 conf/logstash.conf 的内容如下：
 ```
 input{
@@ -868,7 +868,7 @@ output {
 ```
 
 
-###6.6.5 Makefile
+### 6.6.5 Makefile  
 Makefile  内容如下：
 ```
 TAG = v0.1
@@ -882,10 +882,10 @@ push:
 	docker push $(REGISTRY)/$(USER)/$(IMAGE):$(TAG)
 ```
 
-##6.7 部署 FKLEK 日志Docker 环境部署
+## 6.7 部署 FKLEK 日志Docker 环境部署  
 步骤如下：
 
-###6.7.1 部署 ES 容器
+### 6.7.1 部署 ES 容器  
 第一次部署时，在宿主机(如 172.25.3.194)上建立 ES 数据存储空间：
 ```
 mkdir /es/data        #第一次运行时需要创建对应目录
@@ -897,14 +897,14 @@ docker run -it -p 127.0.0.1:9200:9200 --net=host --restart=always -v /es/data:/u
 ```
 镜像创建的容器启动后会自动完成 ES 创建, 映射模板更新的工作
 
-###6.7.2 部署 Kibana 容器
+###6.7.2 部署 Kibana 容器  
 在 ElasticSearch 所在的主机(172.25.3.194)上执行如下命令部署 Kibana：
 ```
 docker run -it -p 127.0.0.1:5601:5601 --net=host --restart=always reg.dhdc.com/loggingefk/kibana:v1.0.1
 ```
 Kibana 容器正常运行后会自动完成 Kibana 的启动工作
 
-###6.7.3 部署 zookeeper 容器
+### 6.7.3 部署 zookeeper 容器
 使用如下命令启动 zookeeper ：
 
 ```
@@ -912,18 +912,18 @@ mkdir -p /mnt/zookeeperdata /mnt/zookeeperlog   #第一次运行时需要创建�
 docker run -dit --net=host --restart=always -v /mnt/zookeeperdata:/opt/data/zookeeperdata:rw -v /mnt/zookeeperlog:/opt/log/zookeeplogs:rw reg.dhdc.com/loggingefk/zookeeper:v0.1
 ```
 
-###6.7.4 部署 kafka 容器
+### 6.7.4 部署 kafka 容器  
 使用如下命令启动 kafka ：
 
 ```
 mkdir -p /mnt/kafkalog   #第一次运行时需要创建对应目录
 docker run -dit --net=host --restart=always -v /mnt/kafkalog:/opt/log/kafkalogs:rw reg.dhdc.com/loggingefk/kafka:v0.1
 ```
-###6.7.5 部署 logstash 容器
+### 6.7.5 部署 logstash 容器  
 使用如下命令启动 kafka ：
 docker run -it  --net=host  --restart=always reg.dhdc.com/loggingefk/logstash:v0.1
 
-###6.7.6 部署 fluentd_kafka 容器
+### 6.7.6 部署 fluentd_kafka 容器  
 使用如下命令启动 fluentd_kafka 容器:
 ```
 docker run -it --net=host --restart=always -v /var/log/containers:/var/log/containers  -v /var/lib/docker:/var/lib/docker reg.dhdc.com/loggingefk/fluentd_kafka:v0.1
@@ -993,10 +993,10 @@ status.storage.topic=connect-status
 ```
 
 新配置项的解释：
-(1) group.id=connect-cluster ： Kafka Connect group 的集群识别符。应该是唯一的，不能干扰消费者从给定的Kafka群集中读取数据。
-(2) offset.storage.topic=connect-offsets ：Kafka Connect 用来存储偏移信息的 topic 的名字；理论上该 topic 后面有多个分区，被复制和配置用于压缩。
-(3) config.storage.topic=connect-configs： Kafka Connect 用来存储配置信息的 topic 的名字；理论上该 topic 配置是有单个分区，并且高度复制。
-(4) status.storage.topic=connect-status：Kafka Connect 用来存储 work status 信息的 topic 的名字；理论上该 topic 有多个分区、副本并且被压缩。
+(1) group.id=connect-cluster ： Kafka Connect group 的集群识别符。应该是唯一的，不能干扰消费者从给定的Kafka群集中读取数据。  
+(2) offset.storage.topic=connect-offsets ：Kafka Connect 用来存储偏移信息的 topic 的名字；理论上该 topic 后面有多个分区，被复制和配置用于压缩。  
+(3) config.storage.topic=connect-configs： Kafka Connect 用来存储配置信息的 topic 的名字；理论上该 topic 配置是有单个分区，并且高度复制。  
+(4) status.storage.topic=connect-status：Kafka Connect 用来存储 work status 信息的 topic 的名字；理论上该 topic 有多个分区、副本并且被压缩。 
 
 ### 以分布式模式启动 connector
 命令如下：
