@@ -107,6 +107,14 @@ buffer_queue_limit 256   // buffer 最多包含的 chunk 的数量
 request_timeout 60   // 某些场景下，fluentd 发送数据到 ElasticSearch 后等待 HTTP 请求的返回超时时间，如果超时时间到达没有返回，则会重发数据，导致日志数据记录重复，数量不一致.  
 ```
 
+(3) filter 插件解析 k8s 元数据部分
+```
+<filter kubernetes.**>
+  type kubernetes_metadata
+  kubernetes_url http://172.25.3.194:8080  # 指定 Apiserver 的 URL，如果以 daemonset 方式部署则可以不设置
+</filter>
+```
+
 ### 2.2.3 启动 FLuentd 服务的脚本
 脚本 start-fluentd.sh 用于启动 Fluentd 服务，在 Fluentd 容器正常启动后，可以在容器中通过该脚本启动 Fluentd 服务.
 
@@ -679,6 +687,7 @@ done
 
 <filter kubernetes.**>
   type kubernetes_metadata
+  kubernetes_url http://172.25.3.194:8080
 </filter>
 
 <match **>
@@ -850,7 +859,7 @@ filter {
     json {
         source => "message"
         #target => "doc"
-        #remove_field => ["message"]
+        remove_field => ["message"]
     }
 }
 
